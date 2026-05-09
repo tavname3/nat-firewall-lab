@@ -1,4 +1,4 @@
-# 🛡️ Servidor NAT / Firewall / DNS / DHCP en Ubuntu Server 24.04
+# Servidor NAT / Firewall / DNS / DHCP en Ubuntu Server 24.04
 
 ## Descripción general
 
@@ -15,7 +15,7 @@ Internet
   192.168.100.1
     │
     │ (enp63s0) 192.168.100.250  ← WAN del servidor
-[ Ubuntu Server ]  <── Este repositorio
+[ Ubuntu Server ] 
   (enp32s0) 100.50.25.1         ← LAN del servidor
     │
   [ Hub ]
