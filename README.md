@@ -1,4 +1,4 @@
-# Servidor NAT / Firewall / DNS / DHCP en Ubuntu Server 24.04
+# 🛡️ Servidor NAT / Firewall / DNS / DHCP en Ubuntu Server 24.04
 
 ## Descripción general
 
@@ -14,11 +14,11 @@ Internet
 [ HomeRouter / Modem ]
   192.168.100.1
     │
-    │ (enp32s0) 192.168.100.250   ← WAN del servidor
-[ Ubuntu Server ]  
-  (enp63s0) 100.50.25.1          ← LAN del servidor
+    │ (enp63s0) 192.168.100.250  ← WAN del servidor
+[ Ubuntu Server ]  <── Este repositorio
+  (enp32s0) 100.50.25.1         ← LAN del servidor
     │
-  [ Switch]
+  [ Hub ]
     │
 [ MainPCLab ]
   100.50.25.15
@@ -28,8 +28,8 @@ Internet
 
 | Interfaz | Rol | Dirección IP |
 |---|---|---|
-| `enp32s0` | WAN (hacia router doméstico) | 192.168.100.250 |
-| `enp63s0` | LAN (hacia red interna) | 100.50.25.1 |
+| `enp32s0` | LAN (red interna) | `100.50.25.1` |
+| `enp63s0` | WAN (hacia router doméstico) | `192.168.100.250` |
 
 ---
 
@@ -103,6 +103,7 @@ nftables es el framework moderno de filtrado de paquetes en Linux, sucesor de ip
 sudo nano /etc/nftables.conf
 ```
 
+
 ```nft
 #!/usr/sbin/nft -f
 
@@ -113,44 +114,39 @@ flush ruleset
 # ─────────────────────────────────────────
 table inet filter {
 
-    # Tráfico entrante al servidor
     chain input {
         type filter hook input priority 0; policy drop;
 
         # Permitir tráfico de loopback
-        iif lo accept
+        iif "lo" accept
 
-        # Permitir conexiones ya establecidas
+        # Permitir conexiones ya establecidas y relacionadas
         ct state established,related accept
 
-        # Permitir SSH solo desde la LAN interna
-        iif enp63s0 tcp dport 22 accept
+        # Permitir SSH (administración del servidor)
+        tcp dport 22 accept
 
-        # Permitir DNS y DHCP desde la LAN
-        iif enp63s0 udp dport { 53, 67 } accept
-        iif enp63s0 tcp dport 53 accept
+        # Permitir puerto 2222 (port forwarding hacia MainPCLab)
+        tcp dport 2222 accept
 
-        # Permitir ICMP (ping) desde la LAN
-        iif enp63s0 icmp type echo-request accept
-
-        # Descartar todo lo demás y registrar
-        log prefix "nftables DROP INPUT: " drop
+        # Permitir ICMP IPv4 e IPv6
+        icmp type echo-request accept
+        icmpv6 type echo-request accept
     }
 
-    # Tráfico que el servidor reenvía entre interfaces
     chain forward {
-        type filter hook forward priority 0; policy drop;
+        type filter hook forward priority filter; policy drop;
 
-        # Permitir tráfico de la LAN hacia internet
-        iif enp63s0 oif enp32s0 accept
+        # Tráfico LAN hacia Internet
+        iif "enp32s0" oif "enp63s0" accept
 
-        # Permitir tráfico de retorno (respuestas)
+        # Tráfico Internet hacia LAN
+        iif "enp63s0" oif "enp32s0" accept
+
+        # Conexiones ya establecidas
         ct state established,related accept
-
-        log prefix "nftables DROP FORWARD: " drop
     }
 
-    # Tráfico saliente del servidor
     chain output {
         type filter hook output priority 0; policy accept;
     }
@@ -161,14 +157,27 @@ table inet filter {
 # ─────────────────────────────────────────
 table ip nat {
 
-    chain postrouting {
-        type nat hook postrouting priority 100;
+    chain prerouting {
+        type nat hook prerouting priority dstnat; policy accept;
 
-        # Enmascarar el tráfico de la LAN que sale por la WAN
-        oif enp32s0 masquerade
+        # Port forwarding: puerto 2222 → SSH de MainPCLab (100.50.25.15:22)
+        iif "enp63s0" tcp dport 2222 dnat to 100.50.25.15:22
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+
+        # Enmascarar tráfico saliente
+        oif "enp63s0" masquerade
     }
 }
 ```
+
+> **Notas de implementación:**
+> - El puerto `2222` en `input` es necesario para que el servidor acepte conexiones destinadas al port forwarding hacia `MainPCLab`
+> - SSH está abierto en todas las interfaces; como mejora de hardening se puede restringir a la LAN con `iif "enp63s0" tcp dport 22 accept`
+> - El `masquerade` sobre `enp63s0` funciona en este lab; en producción debería aplicarse sobre la interfaz WAN (`enp32s0`)
+
 
 Aplicar la configuración:
 
@@ -211,24 +220,48 @@ sudo nano /etc/bind/named.conf.options
 options {
     directory "/var/cache/bind";
 
-    # Solo escuchar en la interfaz LAN
-    listen-on { 100.50.25.1; };
+    recursion yes;
 
-    # Permitir consultas solo desde la red interna
-    allow-query { 100.50.25.0/24; };
+    # Permitir recursión y consultas solo desde localhost y la red WAN del servidor
+    allow-recursion {
+        127.0.0.1;
+        192.168.100.0/24;
+    };
+    allow-query {
+        127.0.0.1;
+        192.168.100.0/24;
+    };
 
-    # Forwarders: servidores DNS públicos como respaldo
+    # Forwarders: Quad9 (con filtrado de malware) y Cloudflare como respaldo
     forwarders {
-        8.8.8.8;
+        9.9.9.9;
         1.1.1.1;
     };
 
-    forward only;
+    dnssec-validation no;
 
-    dnssec-validation auto;
-    recursion yes;
+    # Escuchar en todas las interfaces IPv4, deshabilitar IPv6
+    listen-on { any; };
+    listen-on-v6 { none; };
+
+    # Deshabilitar transferencias de zona (previene ataques de enumeración DNS)
+    allow-transfer { none; };
+};
+
+# Logging de consultas DNS con rotación automática
+logging {
+    channel query_log {
+        file "/var/log/bind_queries.log" versions 3 size 5m;
+        severity info;
+        print-time yes;
+    };
+    category queries {
+        query_log;
+    };
 };
 ```
+
+> **Nota de seguridad:** Se usa `9.9.9.9` (Quad9) como forwarder principal porque filtra dominios maliciosos conocidos por defecto, añadiendo una capa extra de protección para los clientes de la LAN. `allow-transfer { none; }` previene ataques de transferencia de zona (AXFR).
 
 Verificar la configuración:
 
@@ -277,19 +310,19 @@ sudo nano /etc/dhcp/dhcpd.conf
 ```
 
 ```
-# Parámetros globales
 default-lease-time 600;
 max-lease-time 7200;
-authoritative;
+ddns-update-style none;
 
 # Subred LAN interna
 subnet 100.50.25.0 netmask 255.255.255.0 {
-    range 100.50.25.10 100.50.25.100;
+    range 100.50.25.10 100.50.25.30;
     option routers 100.50.25.1;
-    option domain-name-servers 100.50.25.1;
-    option broadcast-address 100.50.25.255;
+    option domain-name-servers 192.168.100.250, 8.8.8.8;
 }
 ```
+
+> **Nota:** El rango `.10` a `.30` limita a 21 hosts simultáneos, adecuado para un entorno de laboratorio. `domain-name-servers` apunta al servidor por su interfaz WAN (`192.168.100.250`) con `8.8.8.8` como respaldo público.
 
 Habilitar y arrancar el servicio:
 
