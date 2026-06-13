@@ -1,0 +1,13 @@
+$TTL 86400
+@   IN  SOA ns1.empresa.local. admin.empresa.local. (
+        2026042901
+        3600
+        1800
+        604800
+        86400 )
+
+    IN  NS  ns1.empresa.local.
+ns1 IN  A   192.168.100.250
+
+@   IN  A   192.168.100.250
+*   IN  A   192.168.100.250
