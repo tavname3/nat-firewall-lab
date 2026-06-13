@@ -93,3 +93,10 @@ Cliente → facebook.com
 - `isc-dhcp-server`
 - `nginx`
 - IP forwarding habilitado: `net.ipv4.ip_forward = 1`
+
+## Autor
+ 
+**Gustavo Isaias Nava Merino**  
+TSU en Infraestructura de Redes Digitales  
+Ingeniería en Redes Inteligentes y Ciberseguridad *(cursando)*  
+Universidad Tecnológica de Puebla
