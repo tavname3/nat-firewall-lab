@@ -1,0 +1,48 @@
+zone "empresa.local" {
+    type master;
+    file "/etc/bind/db.empresa.local";
+};
+
+zone "facebook.com" {
+    type master;
+    file "/etc/bind/db.blocked";
+};
+
+zone "instagram.com" {
+    type master;
+    file "/etc/bind/db.blocked";
+};
+
+zone "tiktok.com" {
+    type master;
+    file "/etc/bind/db.blocked";
+};
+
+zone "fakebank-login.com" {
+    type master;
+    file "/etc/bind/db.blocked";
+};
+
+zone "phishing-alert-test.com" {
+    type master;
+    file "/etc/bind/db.blocked";
+};
+
+zone "100.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.100";
+};
+# Typosquatting de bancos mexicanos comunes
+zone "banamex-login.com" { type master; file "/etc/bind/db.blocked"; };
+zone "bbva-secure.com" { type master; file "/etc/bind/db.blocked"; };
+zone "santander-verify.com" { type master; file "/etc/bind/db.blocked"; };
+
+# Patrones comunes de phishing
+zone "secure-login-verify.com" { type master; file "/etc/bind/db.blocked"; };
+zone "account-suspended-alert.com" { type master; file "/etc/bind/db.blocked"; };
+zone "paypal-security-check.com" { type master; file "/etc/bind/db.blocked"; };
+
+zone "malicious-phishing.com" {
+    type master;
+    file "/etc/bind/db.blocked";
+};

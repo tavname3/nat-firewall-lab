@@ -1,0 +1,41 @@
+options {
+    directory "/var/cache/bind";
+
+    recursion yes;
+
+    allow-recursion {
+        127.0.0.1;
+        192.168.100.0/24;
+	100.50.25.0/24;
+    };
+
+    allow-query {
+        127.0.0.1;
+        192.168.100.0/24;
+	100.50.25.0/24;
+    };
+
+    forwarders {
+        9.9.9.9;
+        1.1.1.1;
+    };
+
+    dnssec-validation no;
+
+    listen-on { any; };
+    listen-on-v6 { none; };
+
+    allow-transfer { none; };
+};
+
+logging {
+    channel query_log {
+        file "/var/log/bind_queries.log" versions 3 size 5m;
+        severity info;
+        print-time yes;
+    };
+
+    category queries {
+        query_log;
+    };
+};
